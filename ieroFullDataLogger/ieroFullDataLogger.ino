@@ -12,18 +12,21 @@
 #define LOG_INTERVAL  5000 // mills between entries
 
 #define dht22Pin 2    // DHT22 on digital pin 2 
-#define sctPin 1      // SCT on analog pin 1 
+#define sctPin 2      // SCT on analog pin 1 
+//#define sctMidPtPin 1  // SCT on analog pin 1 
 
 dht DHT;              // DHT22 (temperature and humidity)
 RTC_Millis rtc;       // Real Time Clock
 EnergyMonitor emon1;  // SCT 
+EnergyMonitor emon2;  // SCT mid pt
+
 File logFile;
 
 int loopCount=0;
 
 void error(char *str) {
-  //Serial.print("error: ");
-  //Serial.println(str);
+  Serial.print("error: ");
+  Serial.println(str);
   while(1);
 }
 
@@ -36,7 +39,12 @@ void setup() {
 
   // SCT setup and calibration
   // calibration = Nb spires / burden resistance
-  emon1.current(sctPin, 111.1);
+  //emon1.voltage(sctPin, 234.26,1.7);
+  //emon2.voltage(sctMidPtPin, 234.26,1.7);
+
+  float calib=30;
+  emon1.current(sctPin, calib);
+  //emon2.current(sctMidPtPin, calib);
 
   //Serial.print("Initializing SD card...");
   pinMode(SS, OUTPUT);
@@ -110,13 +118,19 @@ void loop() {
   //Serial.println(DHT.humidity);
   
   // Read SCT
-  double Irms = emon1.calcIrms(1480);  // 1480 samples taken
-   
-  //Serial.print("Apparent Power : ");    
-  //Serial.println(Irms*230);
-  //Serial.print("Irms : ");    
-  //Serial.println(Irms);
   
+  float irms = emon1.calcIrms(1480);  // 1480 samples taken
+  float irmsMidPt = emon2.calcIrms(1480);  // 1480 samples taken
+  float power = irms*230;
+  //Serial.print("Apparent Power : ");    
+  //Serial.print(power);
+  //Serial.print(" , ");
+  //Serial.println(irmsMidPt*230);
+  //Serial.print("Irms : ");
+  //Serial.print(irms);
+  //Serial.print(" , ");
+  //Serial.println(irmsMidPt);
+
   // fetch the time
   DateTime now = rtc.now();
     
@@ -160,14 +174,18 @@ void loop() {
   dataString += ",";
 
   // log sct sensor
-  dataString += Irms;
+  dataString += irms;
   dataString += ",";  
+  dataString += power ;
 
   // write log
   logFile.println(dataString);
 
-  // print to the serial port too:
-  //Serial.println(dataString);
+   //print to the serial port too:
+  if (loopCount%10 == 0)
+    Serial.println("   Date      Time  , Temp, Humid,Irms,Pow") ;
+  Serial.println(dataString);
+  loopCount++;
   
   logFile.flush();  
 }

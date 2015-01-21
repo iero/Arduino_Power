@@ -23,8 +23,8 @@ void error(char *str) {
 }
 
 void setup() {
-  //Serial.begin(9600);
-  //while (!Serial) { ; }  // wait for serial port to connect. Needed for Leonardo only
+  Serial.begin(9600);
+  while (!Serial) { ; }  // wait for serial port to connect. Needed for Leonardo only
 
   // RTC setup
   rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
@@ -134,8 +134,6 @@ void loop() {
     dataString += now.second();
   } else dataString += now.second();
     
-  
-  
   dataString += ",";
 
   // log dht22 sensor
@@ -147,7 +145,7 @@ void loop() {
   logFile.println(dataString);
 
   // print to the serial port too:
-  //Serial.println(dataString);
+  Serial.println(dataString);
   
   logFile.flush();  
 }
