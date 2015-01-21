@@ -1,25 +1,20 @@
 /*
-  SD card datalogger 
+  SD card datalogger
+ 	 
  */
- 
 #include <SPI.h>
 #include <dht.h>
 #include <SD.h>
 #include <Wire.h>
 #include "RTClib.h"
-#include "EmonLib.h"
 
 #define LOG_INTERVAL  5000 // mills between entries
 
-#define dht22Pin 2    // DHT22 on digital pin 2 
-#define sctPin 1      // SCT on analog pin 1 
+#define dht22Pin 2  // DHT22 on digital pin 2 
+dht DHT;            // DHT22 (temperature and humidity)
+RTC_Millis rtc;     // Real Time Clock
 
-dht DHT;              // DHT22 (temperature and humidity)
-RTC_Millis rtc;       // Real Time Clock
-EnergyMonitor emon1;  // SCT 
 File logFile;
-
-int loopCount=0;
 
 void error(char *str) {
   //Serial.print("error: ");
@@ -33,10 +28,6 @@ void setup() {
 
   // RTC setup
   rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
-
-  // SCT setup and calibration
-  // calibration = Nb spires / burden resistance
-  emon1.current(sctPin, 111.1);
 
   //Serial.print("Initializing SD card...");
   pinMode(SS, OUTPUT);
@@ -109,14 +100,6 @@ void loop() {
   //Serial.print("Humidite : ");    
   //Serial.println(DHT.humidity);
   
-  // Read SCT
-  double Irms = emon1.calcIrms(1480);  // 1480 samples taken
-   
-  //Serial.print("Apparent Power : ");    
-  //Serial.println(Irms*230);
-  //Serial.print("Irms : ");    
-  //Serial.println(Irms);
-  
   // fetch the time
   DateTime now = rtc.now();
     
@@ -151,17 +134,14 @@ void loop() {
     dataString += now.second();
   } else dataString += now.second();
     
+  
+  
   dataString += ",";
 
   // log dht22 sensor
   dataString += DHT.temperature;
   dataString += ",";
   dataString += DHT.humidity;
-  dataString += ",";
-
-  // log sct sensor
-  dataString += Irms;
-  dataString += ",";  
 
   // write log
   logFile.println(dataString);
