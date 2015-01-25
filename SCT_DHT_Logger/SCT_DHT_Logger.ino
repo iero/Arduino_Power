@@ -1,45 +1,75 @@
-/*
-  SD card datalogger
- 	 
- */
-#include <SPI.h>
-#include <dht.h>
-#include <SD.h>
+
+// Log SCT and DHT values values on SD card. 
+
+// For RTC clock reading
 #include <Wire.h>
 #include "RTClib.h"
+// for DHT22
+#include <dht.h>
+// For SD logging
+#include <SD.h>
+#include <SPI.h>
+// for SCT logging
+#include "EmonLib.h"
 
-#define LOG_INTERVAL  5000 // mills between entries
+#define LOG_INTERVAL  5000  // mills between entries
+#define DHT22PIN 8          // DHT22 on digital pin 8 
+#define SCTPIN 2            // SCT on analog pin 2
 
-#define dht22Pin 2  // DHT22 on digital pin 2 
-dht DHT;            // DHT22 (temperature and humidity)
-RTC_Millis rtc;     // Real Time Clock
+#define CALIBSCT 30         // 30A max SCT
+
+#define SERIAL 0            // 1 for serial and sd card, 0 for sd only
+
+dht DHT;             // DHT22 (temperature and humidity)
+RTC_DS1307 rtc;      // real time clock
+EnergyMonitor sct;   // SCT 
 
 File logFile;
+int loopCount=0;
 
-void error(char *str) {
-  //Serial.print("error: ");
-  //Serial.println(str);
-  while(1);
-}
+void setup () {
+  #if SERIAL
+    Serial.begin(9600);
+  #endif
 
-void setup() {
-  Serial.begin(9600);
-  while (!Serial) { ; }  // wait for serial port to connect. Needed for Leonardo only
+  #ifdef AVR
+    Wire.begin();
+  #else
+    Wire1.begin(); // Shield I2C pins connect to alt I2C bus on Arduino Due
+  #endif
+  
+  rtc.begin();
+  
+  pinMode(7,OUTPUT);
+   
+  sct.current(SCTPIN, CALIBSCT);
 
-  // RTC setup
-  rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
-
+  if (! rtc.isrunning()) {
+    #if SERIAL
+      Serial.println("RTC is NOT running!");
+    #endif
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+  
+  #if SERIAL
+    while (!Serial) { ; }  // wait for serial port to connect. Needed for Leonardo only
+  #endif
+  
   //Serial.print("Initializing SD card...");
   pinMode(SS, OUTPUT);
   
-  // see if the card is present and can be initialized:
+    // see if the card is present and can be initialized:
   if (!SD.begin(10, 11, 12, 13)) {
-  //  Serial.println("Card failed, or not present");
+    #if SERIAL
+      Serial.println("Card failed, or not present");
+    #endif
     while (1) ;    // don't do anything more:
   }
-  //Serial.println("Card initialized.");
+    #if SERIAL
+      Serial.println("Card initialized.");
+    #endif
     
-  // fetch the time for file name
+ // fetch the time for file name
   DateTime now = rtc.now();
   String dirNameString = "";
   String fileNameString = "";
@@ -81,28 +111,24 @@ void setup() {
   char filename[fileNameString.length()+1];
   fileNameString.toCharArray(filename, sizeof(filename));
   logFile = SD.open(filename, FILE_WRITE); 
-  Serial.println("File "+fileNameString+" created");
-  
-  if (! logFile) {
-    error("couldnt create file");
-  }
+  #if SERIAL
+    Serial.println("File "+fileNameString+" created");
+  #endif
 }
 
-void loop() {  
+void loop () {
   // delay for the amount of time we want between readings
   delay((LOG_INTERVAL -1) - (millis() % LOG_INTERVAL));
-
-  // Read DHT22 sensor
-  int chk = DHT.read22(dht22Pin);
-  
-  //Serial.print("Temperature : ");    
-  //Serial.println(DHT.temperature);
-  //Serial.print("Humidite : ");    
-  //Serial.println(DHT.humidity);
   
   // fetch the time
   DateTime now = rtc.now();
-    
+
+  //print to the serial port too:
+  #if SERIAL
+    if (loopCount%10 == 0)
+      Serial.println("   Date      Time  ,Temp, Humid,Irms,Pow") ;
+  #endif
+  
   // make a string for assembling the data to log:
   String dataString = "";
 
@@ -136,18 +162,36 @@ void loop() {
     
   dataString += ",";
 
-  // log dht22 sensor
+  digitalWrite(7, HIGH);   // turn the LED on (HIGH is the voltage level)
+  delay(1000);              // wait for a second
+  DHT.read22(DHT22PIN);
+    // log dht22 sensor
   dataString += DHT.temperature;
   dataString += ",";
   dataString += DHT.humidity;
+  dataString += ",";
+  
+   // log sct sensor
+  float irms = sct.calcIrms(1480);  // 1480 samples taken
+  float power = irms*230;
+  if (loopCount > 0) {
+    dataString += irms;
+    dataString += ",";  
+    dataString += power ;
+  } else
+    dataString += "0.00,0.00";
+
+  delay(1000);              // wait for a second 
+  digitalWrite(7, LOW);    // turn the LED off by making the voltage LOW
 
   // write log
   logFile.println(dataString);
 
   // print to the serial port too:
-  Serial.println(dataString);
+  #if SERIAL
+    Serial.println(dataString);
+  #endif
   
+  loopCount++;
   logFile.flush();  
 }
-
-

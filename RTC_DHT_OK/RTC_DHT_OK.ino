@@ -2,7 +2,12 @@
 
 #include <Wire.h>
 #include "RTClib.h"
+#include <dht.h>
 
+#define LOG_INTERVAL  5000 // mills between entries
+#define dht22Pin 8  // DHT22 on digital pin 2 
+
+dht DHT;            // DHT22 (temperature and humidity)
 RTC_DS1307 rtc;
 
 void setup () {
@@ -18,15 +23,15 @@ void setup () {
 
   if (! rtc.isrunning()) {
     Serial.println("RTC is NOT running!");
-    // following line sets the RTC to the date & time this sketch was compiled
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
   }
+  
 }
 
 void loop () {
+    // delay for the amount of time we want between readings
+    delay((LOG_INTERVAL -1) - (millis() % LOG_INTERVAL));
+    
     DateTime now = rtc.now();
     
     Serial.print(now.year(), DEC);
@@ -40,11 +45,15 @@ void loop () {
     Serial.print(now.minute(), DEC);
     Serial.print(':');
     Serial.print(now.second(), DEC);
-    Serial.println();
+    Serial.print(" ");
 
-digitalWrite(7, HIGH);   // turn the LED on (HIGH is the voltage level)
+  digitalWrite(7, HIGH);   // turn the LED on (HIGH is the voltage level)
   delay(1000);              // wait for a second
+  DHT.read22(8);
+  Serial.print(DHT.humidity);
+  Serial.print("%, ");
+  Serial.print(DHT.temperature);
+  Serial.println("degC");
   digitalWrite(7, LOW);    // turn the LED off by making the voltage LOW
   delay(1000);              // wait for a second 
-    delay(3000);
 }
