@@ -20,7 +20,7 @@
 #define CALIBSCT 30         // 30A max SCT
 #define SERIAL 0            // 1 for serial and sd card, 0 for sd only
 #define FRENCHTOUCH 1       // Replace . by , in values
-# define SEPARATOR ';'      // Separator for CSV. ; is good for Numbers.
+#define SEPARATOR ';'      // Separator for CSV. ; is good for Numbers.
 
 // objects creation
 
@@ -39,6 +39,7 @@ String getDate(boolean reverse);
 String getHour(boolean separator);
 File createLogFile();
 void printLog();
+void rotateLog();
 
 void setup () {
   #if SERIAL
@@ -89,57 +90,16 @@ void loop () {
   // delay for the amount of time we want between readings
   delay((LOG_INTERVAL -1) - (millis() % LOG_INTERVAL));
   
+  rotateLog();
+  
   //print to the serial port too:
   #if SERIAL
     if (loopCount%10 == 0)
       Serial.println("   Date      Time  ,Temp, Humid,Irms,Pow") ;
   #endif
   
-  // make a string for assembling the data to log:
-  String dataString = "";
-
-  // log time
-  dataString += getCompleteDate();    
-  dataString += SEPARATOR;
-
-  digitalWrite(7, HIGH);   // turn the LED on (HIGH is the voltage level)
-  delay(1000);              // wait for a second
-  DHT.read22(DHT22PIN);
-    // log dht22 sensor
-  dataString += DHT.temperature;
-  dataString += SEPARATOR;
-  dataString += DHT.humidity;
-  dataString += SEPARATOR;
-  
-   // log sct sensor
-  float irms = sct.calcIrms(1480);  // 1480 samples taken
-  float power = irms*230;
-  if (loopCount > 0) {
-    dataString += irms;
-    dataString += SEPARATOR;  
-    dataString += power ;
-  } else {
-    dataString += "0.00";
-    dataString += SEPARATOR;
-    dataString += "0.00";
-  }
-
-  delay(1000);              // wait for a second 
-  digitalWrite(7, LOW);    // turn the LED off by making the voltage LOW
-
-  // Some french touch
-  #if FRENCHTOUCH
-    dataString.replace(".", ",");
-  #endif
-  
-  // write log
-  logFile.println(dataString);
-
-  // print to the serial port too:
-  #if SERIAL
-    Serial.println(dataString);
-  #endif
-  
+  readSensors();
+    
   loopCount++;
   logFile.flush();  
 }
@@ -225,15 +185,74 @@ File createLogFile() {
   char filename[fileNameString.length()+1];
   fileNameString.toCharArray(filename, sizeof(filename));
   return SD.open(filename, FILE_WRITE); 
-  #if SERIAL
-    Serial.println("File "+fileNameString+" created");
-  #endif  
+  printLog("File created : "+fileNameString);
 }
 
 void printLog(String message) {
   #if SERIAL
     Serial.println(message);  
-  #endif    
+  #endif
+  lcd.clear();
+  lcd.print(message);
 }
+
+void rotateLog() {
+  DateTime now = rtc.now();
+  if (now.hour()==0 && now.minute()==0 && now.second() < 20)
+    createLogFile();
+  printLog("It's a new day");
+}
+
+void readSensors() {
+  lcd.clear();
+    // make a string for assembling the data to log:
+  String dataString = "";
+
+  // log time
+  dataString += getCompleteDate();    
+  dataString += SEPARATOR;
+
+  digitalWrite(7, HIGH);   // turn the LED on (HIGH is the voltage level)
+  delay(1000);              // wait for a second
+  DHT.read22(DHT22PIN);
+    // log dht22 sensor
+  dataString += DHT.temperature;
+  dataString += SEPARATOR;
+  dataString += DHT.humidity;
+  dataString += SEPARATOR;
+
+  //lcd.setCursor(9, 0);
+  //lcd.print(DHT.temperature);
+  
+   // log sct sensor
+  float irms = sct.calcIrms(1480);  // 1480 samples taken
+  float power = irms*230;
+  if (loopCount > 0) {
+    dataString += irms;
+    dataString += SEPARATOR;  
+    dataString += power ;
+  } else {
+    dataString += "0.00";
+    dataString += SEPARATOR;
+    dataString += "0.00";
+  }
+
+  delay(1000);              // wait for a second 
+  digitalWrite(7, LOW);    // turn the LED off by making the voltage LOW
+
+  // Some french touch
+  #if FRENCHTOUCH
+    dataString.replace(".", ",");
+  #endif
+  
+  // write log
+  logFile.println(dataString);
+
+  // print to the serial port too:
+  #if SERIAL
+    Serial.println(dataString);
+  #endif
+}
+  
 
 
