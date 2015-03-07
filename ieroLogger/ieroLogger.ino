@@ -11,24 +11,34 @@
 #include <SPI.h>
 // for SCT logging
 #include "EmonLib.h"
+// for LCD
+#include <LiquidCrystal_I2C.h>
 
 #define LOG_INTERVAL  15000  // mills between entries
 #define DHT22PIN 8          // DHT22 on digital pin 8 
 #define SCTPIN 2            // SCT on analog pin 2
-
 #define CALIBSCT 30         // 30A max SCT
-
 #define SERIAL 0            // 1 for serial and sd card, 0 for sd only
 #define FRENCHTOUCH 1       // Replace . by , in values
-
 # define SEPARATOR ';'      // Separator for CSV. ; is good for Numbers.
+
+// objects creation
 
 dht DHT;             // DHT22 (temperature and humidity)
 RTC_DS1307 rtc;      // real time clock
 EnergyMonitor sct;   // SCT 
+LiquidCrystal_I2C lcd(0x20,16,2); // LCD
 
 File logFile;
 int loopCount=0;
+
+// function def
+
+String getCompleteDate();
+String getDate(boolean reverse);
+String getHour(boolean separator);
+File createLogFile();
+void printLog();
 
 void setup () {
   #if SERIAL
@@ -43,14 +53,17 @@ void setup () {
   
   rtc.begin();
   
+  // LCD
+  lcd.init();                      // initialize the lcd 
+  lcd.backlight();
+  lcd.print("Hello world");
+  
   pinMode(7,OUTPUT);
    
   sct.current(SCTPIN, CALIBSCT);
 
   if (! rtc.isrunning()) {
-    #if SERIAL
-      Serial.println("RTC is NOT running!");
-    #endif
+    printLog("RTC is NOT running!");
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
   
@@ -63,61 +76,12 @@ void setup () {
   
     // see if the card is present and can be initialized:
   if (!SD.begin(10, 11, 12, 13)) {
-    #if SERIAL
-      Serial.println("Card failed, or not present");
-    #endif
+    printLog("Card failed, or not present");
     while (1) ;    // don't do anything more:
   }
-    #if SERIAL
-      Serial.println("Card initialized.");
-    #endif
+  printLog("Card initialized.");
     
- // fetch the time for file name
-  DateTime now = rtc.now();
-  String dirNameString = "";
-  String fileNameString = "";
-
-  dirNameString += now.year();
-  if (now.month() < 10) {
-    dirNameString += "0" ; 
-    dirNameString += now.month();
-  } else dirNameString += now.month();
-  if (now.day() < 10) {
-    dirNameString += "0" ; 
-    dirNameString += now.day();
-  } else dirNameString += now.day();
-  
-  char direname[dirNameString.length()+1];
-  dirNameString.toCharArray(direname, sizeof(direname));
-  if ( ! SD.exists(direname)) {
-    SD.mkdir(direname) ;
-    //Serial.println("Directory "+dirNameString+" created");
-  } //else Serial.println("Directory "+dirNameString+" exists");
-  
-  fileNameString += dirNameString+"/";
-  
-  if (now.hour() < 10) {
-    fileNameString += "0" ; 
-    fileNameString += now.hour();
-  } else fileNameString += now.hour();
-  if (now.minute() < 10) {
-    fileNameString += "0" ; 
-    fileNameString += now.minute();
-  } else fileNameString += now.minute();
-  if (now.second() < 10) {
-    fileNameString += "0" ; 
-    fileNameString += now.second();
-  } else fileNameString += now.second();
-    
-  // create a new file
-  fileNameString += ".csv";
-  char filename[fileNameString.length()+1];
-  fileNameString.toCharArray(filename, sizeof(filename));
-  logFile = SD.open(filename, FILE_WRITE); 
-  #if SERIAL
-    Serial.println("File "+fileNameString+" created");
-  #endif
-  
+  logFile=createLogFile();
   logFile.println("DateTime;Temperature;Humidity;Irms;Power");
 }
 
@@ -125,9 +89,6 @@ void loop () {
   // delay for the amount of time we want between readings
   delay((LOG_INTERVAL -1) - (millis() % LOG_INTERVAL));
   
-  // fetch the time
-  DateTime now = rtc.now();
-
   //print to the serial port too:
   #if SERIAL
     if (loopCount%10 == 0)
@@ -138,33 +99,7 @@ void loop () {
   String dataString = "";
 
   // log time
- if (now.day() < 10) {
-    dataString += "0" ; 
-    dataString += now.day();
-  } else dataString += now.day();
-  dataString += "/";
-  if (now.month() < 10) {
-    dataString += "0" ; 
-    dataString += now.month();
-  } else dataString += now.month();
-  dataString += "/";
-  dataString += now.year();
-  dataString += " ";
-  if (now.hour() < 10) {
-    dataString += "0" ; 
-    dataString += now.hour();
-  } else dataString += now.hour();
-  dataString += ":";
-  if (now.minute() < 10) {
-    dataString += "0" ; 
-    dataString += now.minute();
-  } else dataString += now.minute();
-  dataString += ":";
-  if (now.second() < 10) {
-    dataString += "0" ; 
-    dataString += now.second();
-  } else dataString += now.second();
-    
+  dataString += getCompleteDate();    
   dataString += SEPARATOR;
 
   digitalWrite(7, HIGH);   // turn the LED on (HIGH is the voltage level)
@@ -208,3 +143,97 @@ void loop () {
   loopCount++;
   logFile.flush();  
 }
+
+String getCompleteDate() {
+  String dataString = "";
+  dataString += getDate(false);
+  dataString += " " ;
+  dataString += getHour(true);
+ return dataString; 
+}
+
+String getDate(boolean reverse) {
+  DateTime now = rtc.now();
+  
+  String dayString="";
+  if (now.day() < 10) {
+    dayString += "0" ; 
+    dayString += now.day();
+  } else dayString += now.day();
+
+  String monthString="";
+  if (now.month() < 10) {
+    monthString += "0" ; 
+    monthString += now.month();
+  } else monthString += now.month();
+
+  String dataString = "";
+  if (!reverse) {
+    dataString += dayString; 
+    dataString += "/";
+    dataString += monthString;
+    dataString += "/";
+    dataString += now.year();
+  } else {
+    dataString += now.year(); 
+    dataString += monthString;
+    dataString += dayString;
+  }
+  return dataString;
+}
+
+String getHour(boolean separator) {
+  DateTime now = rtc.now();
+  
+  String dataString = "";
+  if (now.hour() < 10) {
+    dataString += "0" ; 
+    dataString += now.hour();
+  } else dataString += now.hour();
+  if (separator) dataString += ":";
+  if (now.minute() < 10) {
+    dataString += "0" ; 
+    dataString += now.minute();
+  } else dataString += now.minute();
+  if (separator) dataString += ":";
+  if (now.second() < 10) {
+    dataString += "0" ; 
+    dataString += now.second();
+  } else dataString += now.second();
+}
+
+File createLogFile() {
+ // fetch the time for file name
+  DateTime now = rtc.now();
+  String dirNameString = "";
+  String fileNameString = "";
+
+  dirNameString=getDate(true);
+  
+  char direname[dirNameString.length()+1];
+  dirNameString.toCharArray(direname, sizeof(direname));
+  if ( ! SD.exists(direname)) {
+    SD.mkdir(direname) ;
+    //Serial.println("Directory "+dirNameString+" created");
+  } //else Serial.println("Directory "+dirNameString+" exists");
+  
+  fileNameString += dirNameString+"/";
+  fileNameString += getHour(false);
+    
+  // create a new file
+  fileNameString += ".csv";
+  char filename[fileNameString.length()+1];
+  fileNameString.toCharArray(filename, sizeof(filename));
+  return SD.open(filename, FILE_WRITE); 
+  #if SERIAL
+    Serial.println("File "+fileNameString+" created");
+  #endif  
+}
+
+void printLog(String message) {
+  #if SERIAL
+    Serial.println(message);  
+  #endif    
+}
+
+
